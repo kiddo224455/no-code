@@ -8,6 +8,10 @@ on:
   # Allow manual deployment from Actions tab
   workflow_dispatch:
 
+env:
+  NODE_VERSION: '18'
+  DEPLOY_ENV: 'github-pages'
+
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
@@ -23,15 +27,39 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Start Deployment 📋
+        run: |
+          echo "Starting deployment process..."
+          echo "Node version: ${{ env.NODE_VERSION }}"
+          echo "Environment: ${{ env.DEPLOY_ENV }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref }}"
+
       - name: Checkout 🛎️
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check Repository Content 📂
+        run: |
+          echo "Listing repository contents..."
+          ls -la
+          echo "Checking frontend directory..."
+          ls -la frontend || echo "Frontend directory not found!"
 
       - name: Setup Node.js ⚙️
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json'
+
+      - name: Verify Node Setup 🔍
+        run: |
+          echo "Node version:"
+          node --version
+          echo "NPM version:"
+          npm --version
 
       - name: Setup Pages
         uses: actions/configure-pages@v3
@@ -39,20 +67,55 @@ jobs:
       - name: Install Dependencies 📦
         run: |
           cd frontend
-          npm ci
+          echo "Installing dependencies..."
+          npm ci --verbose
+          echo "Listing installed packages:"
+          npm list --depth=0
+
+      - name: Check Package Versions 📋
+        run: |
+          cd frontend
+          echo "Checking critical package versions..."
+          npm list react react-dom @mui/material reactflow
 
       - name: Build 🔧
         run: |
           cd frontend
+          echo "Starting build process..."
           npm run build
+          echo "Build complete. Checking build directory..."
+          ls -la build/
         env:
           CI: true
           PUBLIC_URL: /no-code
+          NODE_ENV: production
+
+      - name: Verify Build Output 🔍
+        run: |
+          cd frontend
+          if [ -d "build" ]; then
+            echo "✅ Build directory exists"
+            echo "📊 Build directory size:"
+            du -sh build/
+            echo "📂 Build directory contents:"
+            ls -R build/
+          else
+            echo "❌ Build directory missing!"
+            exit 1
+          fi
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
         with:
           path: ./frontend/build
+
+      - name: Build Summary 📝
+        run: |
+          echo "### Build Status ✨" >> $GITHUB_STEP_SUMMARY
+          echo "- Node.js: $(node --version)" >> $GITHUB_STEP_SUMMARY
+          echo "- NPM: $(npm --version)" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Path: ./frontend/build" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ env.DEPLOY_ENV }}" >> $GITHUB_STEP_SUMMARY
 
   deploy:
     environment:
@@ -62,6 +125,31 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      - name: Deployment Info 📋
+        run: |
+          echo "Starting GitHub Pages deployment..."
+          echo "Target URL: https://kiddo224455.github.io/no-code"
+          echo "Environment: ${{ env.DEPLOY_ENV }}"
+
       - name: Deploy to GitHub Pages 🚀
         id: deployment
-        uses: actions/deploy-pages@v2 
+        uses: actions/deploy-pages@v2
+
+      - name: Verify Deployment 🔍
+        run: |
+          echo "### Deployment Complete ✨" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- URL: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: ${{ env.DEPLOY_ENV }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Deployment Status
+        if: always()
+        run: |
+          if [ "${{ steps.deployment.outcome }}" = "success" ]; then
+            echo "✅ Deployment successful!"
+            echo "🌐 Site available at: ${{ steps.deployment.outputs.page_url }}"
+          else
+            echo "❌ Deployment failed!"
+            echo "Check the logs above for more details."
+            exit 1
+          fi 
